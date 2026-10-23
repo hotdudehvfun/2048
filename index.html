@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>2048</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#101a33">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="2048">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root{--bg:#101a33;--panel:#1a2747;--cell:#233459;--ink:#eaf0ff;--muted:#8da0c9;--gap:clamp(8px,2.6vw,14px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:ui-rounded,"SF Pro Rounded",Nunito,"Trebuchet MS",system-ui,sans-serif;
+  display:flex;justify-content:center;align-items:center;touch-action:none;overscroll-behavior:none;user-select:none;-webkit-user-select:none;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+main{width:max(260px,min(92vw,480px,calc(100dvh - 210px)))}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+h1{margin:0;font-size:clamp(36px,11vw,52px);font-weight:800;color:#ffd166;letter-spacing:-1px;line-height:1}
+.scores{display:flex;gap:8px}
+.score{background:var(--panel);border-radius:10px;padding:6px 12px;text-align:center;min-width:68px}
+.score small{display:block;font-size:11px;color:var(--muted)}
+.score b{font-size:20px}
+.bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px}
+.bar p{margin:0;color:var(--muted);font-size:13px}
+button{font:inherit;font-weight:700;border:0;border-radius:999px;padding:9px 16px;background:#2d4175;color:var(--ink);cursor:pointer}
+button:active{transform:scale(.96)}
+button:disabled{opacity:.35}
+button:focus-visible{outline:3px solid #ffd166;outline-offset:2px}
+button.primary{background:#ffd166;color:#1b2540}
+.btns{display:flex;gap:8px}
+#board{position:relative;aspect-ratio:1;background:var(--panel);border-radius:16px;padding:var(--gap);container-type:inline-size}
+#cells,#tiles{position:absolute;inset:var(--gap)}
+#cells{display:grid;grid-template:repeat(4,1fr)/repeat(4,1fr);gap:var(--gap)}
+#cells i{background:var(--cell);border-radius:10px}
+.tile{position:absolute;left:0;top:0;width:calc((100% - 3*var(--gap))/4);height:calc((100% - 3*var(--gap))/4);
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
+  transition:transform 110ms ease-out;border-radius:10px;font-weight:800;font-size:9.5cqw;color:#fff}
+.tile .in{display:grid;place-items:center;width:100%;height:100%}
+.tile.d3{font-size:7.8cqw}.tile.d4{font-size:6.2cqw}
+.tile.new .in{animation:appear 160ms ease-out backwards}
+.tile.pop .in{animation:pop 160ms}
+@keyframes appear{from{transform:scale(0);opacity:0}}
+@keyframes pop{50%{transform:scale(1.18)}}
+.v2{background:#e8eef7;color:#1b2540}.v4{background:#cfe0f5;color:#1b2540}
+.v8{background:#ffb703;color:#1b2540}.v16{background:#fb8500}.v32{background:#ef476f}.v64{background:#d62855}
+.v128{background:#06d6a0;color:#06352a}.v256{background:#05b88a;color:#06352a}.v512{background:#118ab2}
+.v1024{background:#6a4fd8}.v2048{background:#ffd166;color:#1b2540;box-shadow:0 0 24px 4px #ffd16699}
+.vbig{background:#fff;color:#101a33;box-shadow:0 0 24px 4px #fff9}
+#overlay{position:absolute;inset:0;border-radius:16px;background:rgba(16,26,51,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+#overlay[hidden]{display:none}
+#overlay h2{margin:0;font-size:34px;color:#ffd166}
+#overlay p{margin:0;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}.tile.new .in,.tile.pop .in{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>2048</h1>
+    <div class="scores">
+      <div class="score"><small>Score</small><b id="score">0</b></div>
+      <div class="score"><small>Best</small><b id="best">0</b></div>
+    </div>
+  </header>
+  <div class="bar">
+    <p>Swipe or arrow keys.</p>
+    <div class="btns">
+      <button id="undo" disabled>Undo</button>
+      <button id="new" class="primary">New</button>
+    </div>
+  </div>
+  <div id="board">
+    <div id="cells"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div id="tiles"></div>
+    <div id="overlay" hidden>
+      <h2 id="ot"></h2><p id="om"></p>
+      <div class="btns"><button id="keep" class="primary">Keep going</button><button id="again">New game</button></div>
+    </div>
+  </div>
+</main>
+<script>
+(()=>{
+const $=s=>document.querySelector(s);
+const tilesEl=$('#tiles'), overlay=$('#overlay');
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+let grid, score=0, best=+store.get('2048-best')||0, history=[], won=false, over=false, busy=false;
+
+const empty=()=>Array.from({length:4},()=>Array(4).fill(null));
+const snapshot=()=>({v:grid.map(r=>r.map(t=>t?t.v:0)),score,won});
+
+function setVal(t){
+  t.el.innerHTML='';
+  const s=document.createElement('span');
+  s.className='in';s.textContent=t.v;
+  t.el.appendChild(s);
+  t.el.className='tile v'+(t.v>2048?'big':t.v)+(t.v>=1000?' d4':t.v>=100?' d3':'');
+}
+function place(t){t.el.style.setProperty('--r',t.r);t.el.style.setProperty('--c',t.c)}
+function makeTile(r,c,v,isNew){
+  const t={r,c,v,el:document.createElement('div')};
+  setVal(t);place(t);
+  if(isNew)t.el.classList.add('new');
+  tilesEl.appendChild(t.el);
+  grid[r][c]=t;return t;
+}
+function spawn(){
+  const free=[];
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++)if(!grid[r][c])free.push([r,c]);
+  if(!free.length)return;
+  const [r,c]=free[Math.floor(Math.random()*free.length)];
+  makeTile(r,c,Math.random()<.9?2:4,true);
+}
+function restore(s){
+  tilesEl.innerHTML='';grid=empty();score=s.score;won=!!s.won;over=false;
+  s.v.forEach((row,r)=>row.forEach((v,c)=>{if(v)makeTile(r,c,v,false)}));
+  hideOverlay();update();
+}
+function update(){
+  $('#score').textContent=score;
+  if(score>best){best=score;store.set('2048-best',best)}
+  $('#best').textContent=best;
+  $('#undo').disabled=!history.length;
+  store.set('2048-state',JSON.stringify({...snapshot(),history:history.slice(-20)}));
+}
+function newGame(){
+  history=[];tilesEl.innerHTML='';grid=empty();score=0;won=false;over=false;
+  hideOverlay();spawn();spawn();update();
+}
+function line(dir,i){
+  const a=[0,1,2,3];
+  if(dir==='left')return a.map(k=>[i,k]);
+  if(dir==='right')return a.map(k=>[i,3-k]);
+  if(dir==='up')return a.map(k=>[k,i]);
+  return a.map(k=>[3-k,i]);
+}
+function move(dir){
+  if(busy||over)return;
+  const snap=snapshot();
+  let moved=false,gain=0;const dead=[],grown=[],ng=empty();
+  for(let i=0;i<4;i++){
+    const cells=line(dir,i);
+    const seq=cells.map(([r,c])=>grid[r][c]).filter(Boolean);
+    let k=0;
+    for(let j=0;j<seq.length;j++){
+      const t=seq[j],[r,c]=cells[k],n=seq[j+1];
+      if(n&&n.v===t.v){
+        t.r=n.r=r;t.c=n.c=c;place(t);place(n);
+        dead.push(n);grown.push(t);gain+=t.v*2;ng[r][c]=t;j++;moved=true;
+      }else{
+        if(t.r!==r||t.c!==c)moved=true;
+        t.r=r;t.c=c;place(t);ng[r][c]=t;
+      }
+      k++;
+    }
+  }
+  if(!moved)return;
+  history.push(snap);if(history.length>20)history.shift();
+  grid=ng;score+=gain;busy=true;
+  setTimeout(()=>{
+    dead.forEach(d=>d.el.remove());
+    grown.forEach(t=>{t.v*=2;setVal(t);void t.el.offsetWidth;t.el.classList.add('pop')});
+    spawn();busy=false;update();check();
+  },115);
+}
+function check(){
+  if(!won&&grid.some(r=>r.some(t=>t&&t.v>=2048))){
+    won=true;update();
+    show('2048!','Show-off. Keep going?',true);return;
+  }
+  const full=grid.every(r=>r.every(Boolean));
+  if(!full)return;
+  for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+    const v=grid[r][c].v;
+    if((c<3&&grid[r][c+1].v===v)||(r<3&&grid[r+1][c].v===v))return;
+  }
+  over=true;show('Game Over','Final score: '+score+'. It happens.',false);
+}
+function show(t,m,canKeep){
+  $('#ot').textContent=t;$('#om').textContent=m;
+  $('#keep').hidden=!canKeep;overlay.hidden=false;
+}
+function hideOverlay(){overlay.hidden=true}
+
+$('#new').onclick=newGame;
+$('#again').onclick=newGame;
+$('#keep').onclick=hideOverlay;
+$('#undo').onclick=()=>{
+  if(busy||!history.length)return;
+  restore(history.pop());update();
+};
+
+const keys={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down'};
+addEventListener('keydown',e=>{
+  const d=keys[e.key];
+  if(d){e.preventDefault();if(overlay.hidden)move(d)}
+});
+let sx,sy;
+addEventListener('touchstart',e=>{if(e.target.closest('button'))return;sx=e.touches[0].clientX;sy=e.touches[0].clientY},{passive:true});
+addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
+addEventListener('touchend',e=>{
+  if(sx==null)return;
+  const dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;sx=null;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<24||!overlay.hidden)return;
+  move(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));
+});
+
+// boot: resume saved game or start fresh
+try{
+  const s=JSON.parse(store.get('2048-state'));
+  if(s&&s.v){history=s.history||[];restore(s);}else newGame();
+}catch(e){newGame()}
+$('#best').textContent=best;
+
+
+
+if('serviceWorker' in navigator&&location.protocol.startsWith('http')){
+  addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+
+
+
+})();
+</script>
+</body>
+</html>
